@@ -1,0 +1,16 @@
+{
+  "name": "conrisk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "건설 현장 리스크 관리 서비스 (Cloudflare Pages + Google 로그인)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "dev": "wrangler pages dev public --port 8788 --kv CONRISK_KV --compatibility-date=2026-11-01",
+    "check:gate": "node scripts/check-gate.mjs https://conrisk.pages.dev",
+    "deploy": "wrangler pages deploy public --project-name conrisk"
+  },
+  "devDependencies": {
+    "wrangler": "4.164.0"
+  }
+}
