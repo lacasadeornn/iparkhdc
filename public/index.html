@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ConRisk 리스크 관리</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="/favicon.svg" alt="" width="26" height="26"> ConRisk</div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="dash" class="active">대시보드</button>
+    <button role="tab" data-tab="register">리스크 대장</button>
+    <button role="tab" data-tab="sim">예비비 산정</button>
+  </nav>
+  <div class="user"><span id="user-email"></span> <a href="/auth/logout" class="btn ghost small">로그아웃</a></div>
+</header>
+
+<div id="storage-banner" class="banner" hidden></div>
+
+<main>
+  <!-- 대시보드 -->
+  <section id="tab-dash" class="tab">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid2">
+      <div class="card">
+        <h2>이번 주 결정할 리스크 3건</h2>
+        <p class="small muted">기준: 종결 아닌 리스크 중 발현 여부 → 잔존 점수 → 기한 경과 → 대응전략 미정 → 원가 기대값 순.</p>
+        <ol id="decisions" class="decisions"></ol>
+      </div>
+      <div class="card">
+        <h2>리스크 매트릭스</h2>
+        <div class="seg" id="matrix-mode">
+          <button data-mode="residual" class="active">대응 후(잔존)</button>
+          <button data-mode="inherent">대응 전(고유)</button>
+        </div>
+        <div id="matrix"></div>
+        <p class="small muted">칸 숫자 = 종결 아닌 리스크 건수. 점수 = 확률 등급 × 영향 등급, 15 이상 높음 · 8~14 중간 · 7 이하 낮음. 잔존 확률 등급은 발생확률(%)에서 환산(&lt;10%=1, &lt;30%=2, &lt;50%=3, &lt;70%=4, 그 이상=5).</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>분류별 현황</h2>
+      <div id="by-category"></div>
+    </div>
+  </section>
+
+  <!-- 리스크 대장 -->
+  <section id="tab-register" class="tab" hidden>
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="검색 (제목·원인·담당)">
+      <select id="f-status"><option value="">상태 전체</option></select>
+      <select id="f-cat"><option value="">분류 전체</option></select>
+      <span class="spacer"></span>
+      <button class="btn" id="btn-export">CSV 내보내기</button>
+      <button class="btn primary" id="btn-new">+ 리스크 등록</button>
+    </div>
+    <div class="table-wrap">
+      <table id="tbl">
+        <thead><tr>
+          <th data-sort="id">ID</th><th data-sort="title">리스크</th><th data-sort="category">분류</th>
+          <th data-sort="owner">담당</th><th data-sort="status">상태</th>
+          <th data-sort="inh" class="num">고유</th><th data-sort="res" class="num">잔존</th>
+          <th data-sort="prob" class="num">확률%</th><th data-sort="ev" class="num">원가 기대값<br><span class="small">(백만원)</span></th>
+          <th data-sort="due">조치 기한</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted" id="tbl-count"></p>
+  </section>
+
+  <!-- 예비비 -->
+  <section id="tab-sim" class="tab" hidden>
+    <div class="card">
+      <h2>몬테카를로 예비비 산정</h2>
+      <p class="small muted">종결 아닌 리스크마다 "발생확률(%)"로 발생 여부를 뽑고, 발생하면 원가·공기 영향을 3점 추정(최소·최빈·최대) 삼각분포에서 뽑아 더합니다. 이를 반복해 분포를 만듭니다. 가정: 리스크끼리 독립, 공기 영향은 모두 주공정에 더해짐(보수적). AACE 권장실무 41R-08·57R-09의 확률적 예비비 방식을 단순화한 것입니다.</p>
+      <div class="toolbar">
+        <label>반복 횟수 <select id="iters"><option>1000</option><option selected>10000</option><option>50000</option></select></label>
+        <button class="btn primary" id="btn-sim">다시 계산</button>
+        <span class="small muted" id="sim-meta"></span>
+      </div>
+      <div class="kpis" id="sim-kpis"></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>원가 영향 분포 (백만원)</h3><div id="hist-cost" class="chart"></div></div>
+      <div class="card"><h3>공기 영향 분포 (일)</h3><div id="hist-days" class="chart"></div></div>
+    </div>
+    <div class="card">
+      <h3>리스크별 기여도 (원가 기대값 = 확률 × 삼각분포 평균)</h3>
+      <div id="tornado"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <form id="frm" method="dialog">
+    <h2 id="dlg-title">리스크</h2>
+    <div class="form-grid">
+      <label class="span2">리스크명 <input name="title" required maxlength="120"></label>
+      <label>분류 <select name="category"></select></label>
+      <label>상태 <select name="status"></select></label>
+      <label>담당 <input name="owner" maxlength="40"></label>
+      <label>조치 기한 <input name="due" type="date"></label>
+      <label class="span2">원인 <input name="cause" maxlength="200"></label>
+      <label class="span2">영향 <input name="effect" maxlength="200"></label>
+      <fieldset class="span2"><legend>대응 전 (고유 리스크)</legend>
+        <label>확률 등급 1~5 <input name="iP" type="number" min="1" max="5" required></label>
+        <label>영향 등급 1~5 <input name="iI" type="number" min="1" max="5" required></label>
+      </fieldset>
+      <label>대응 전략 <select name="strategy"><option value="">(미정)</option></select></label>
+      <label class="span2">대응 조치 <textarea name="actions" rows="2" maxlength="500"></textarea></label>
+      <fieldset class="span2"><legend>대응 후 (잔존 리스크, 예비비 계산에 사용)</legend>
+        <label>발생확률 % <input name="prob" type="number" min="0" max="100" step="1" required></label>
+        <label>영향 등급 1~5 <input name="rI" type="number" min="1" max="5" required></label>
+        <label>원가 최소 <input name="cMin" type="number" min="0" step="any"></label>
+        <label>원가 최빈 <input name="cMl" type="number" min="0" step="any"></label>
+        <label>원가 최대 <input name="cMax" type="number" min="0" step="any"></label>
+        <span class="small muted">백만원</span>
+        <label>공기 최소 <input name="dMin" type="number" min="0" step="any"></label>
+        <label>공기 최빈 <input name="dMl" type="number" min="0" step="any"></label>
+        <label>공기 최대 <input name="dMax" type="number" min="0" step="any"></label>
+        <span class="small muted">일</span>
+      </fieldset>
+    </div>
+    <p id="frm-err" class="msg err" hidden></p>
+    <p class="small muted" id="frm-meta"></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn danger" id="btn-del">삭제</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="btn-cancel">취소</button>
+      <button type="submit" class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
